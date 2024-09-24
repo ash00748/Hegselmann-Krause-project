@@ -1,16 +1,19 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mp
-from numba import njit
+from numba import njit, prange
+from matplotlib import animation
+from matplotlib.animation import FuncAnimation
+from IPython import display
 
-@njit()
+@njit(parallel=True)
 def HK_2D_step(pos_arr, R):
     '''
     Returns new potion of particles based on neighbors in circle of radius R
     '''
     N = len(pos_arr)
     pos_new = np.empty((N, 2))
-    for i in range(N):
+    for i in prange(N):
         res_pos = np.array([0.0, 0.0])
         count = 0
         for j in range(N):
@@ -21,7 +24,7 @@ def HK_2D_step(pos_arr, R):
         pos_new[i] = res_pos / count
     return pos_new
 
-njit()
+# @njit()
 def HK_2D_sim(pos_init, R, eps, max_iter):
     '''
     Simulates HK model for 2D particles
@@ -87,3 +90,99 @@ def draw_HK_2D_simulation(res_arr, cmap=None):
     plt.legend(loc="upper right")
     # plt.grid(True)
     plt.show()
+
+def HK_2D_display_steps(res_arr):
+    for res in res_arr:
+        plt.scatter(res[:, 0], res[:, 1])
+        plt.ylim(-0.1, 1)
+        plt.xlim(-0.1, 1)
+        plt.show()
+    
+def animate_HK_2D_simulation(res_arr, file_name='scatter.gif'):
+    Figure = plt.figure()
+
+    plt.gca().set_aspect('equal')
+    # creating a plot
+    scat = plt.scatter(res_arr[0, :, 0], res_arr[0, :, 1]) 
+    
+    plt.xlim(-0.1,1.0)  
+    plt.ylim(-0.1,1.0)   
+
+    def AnimationFunction(frame):
+        offsets = []
+        scat.set_offsets([x for x in res_arr[frame]])
+        return scat,
+
+    anim_created = FuncAnimation(Figure, AnimationFunction, frames=res_arr.shape[0])
+
+    # To save the animation using Pillow as a gif
+    writer = animation.PillowWriter(fps=5,
+                                    metadata=dict(artist='Me'),
+                                    bitrate=1800)
+    anim_created.save(file_name, writer=writer)
+
+def compare(x, y, eps2):
+    '''
+    Функция, которая сравнивает текущую и предыдущую итерацию
+    
+    Parameters
+    ----------
+    x: ndarray, shape (n,)
+        Профиль мнений на текущей итерации, состоящий из n агентов
+    y: ndarray, shape (n,)
+        Профиль мнений на предыдущей итерации, состоящий из n агентов
+    eps2: float
+        Допустимая точность
+        
+    Returns
+    -------
+    result: bool
+        True, если произошла "заморозка" модели
+        False, если "заморозки" не произошло
+    '''
+    result = 1
+    for k in range(len(x)):
+        if abs(x[k] - y[k]) >= eps2:
+            result = 0
+    result = bool(result)
+    return result
+
+
+def order_parameter(x, eps, target_ind=-1):
+    summary = 0
+    n = len(x)
+    for i in range(n):
+        if i == target_ind:
+            continue
+        for j in range(n):
+            if j != target_ind:
+                if abs(x[i]-x[j]) < eps:
+                    summary += 1
+                else:
+                    continue
+    if target_ind == -1:
+        return summary/(n**2)
+    else:
+        return summary/((n-1)**2)
+
+def new_op(x, i, eps):
+    count = 1
+    summ = x[i]
+    for k in range(len(x)):
+        if (abs(x[i] - x[k]) < eps) and (i != k):
+            # print(i, j, x[i], x[j])
+            summ += x[k]
+            count += 1
+    # print(summ, count)
+    return summ/count, count
+
+def is_consensus(x, fix):
+    for i in range(1, fix):
+        if x[i-1] != x[i]:
+            return False
+    if x[fix - 1] != x[fix + 1]:
+        return False
+    for i in range(fix + 2, len(x)):
+        if x[i-1] != x[i]:
+            return False
+    return True
