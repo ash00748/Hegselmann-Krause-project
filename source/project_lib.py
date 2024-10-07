@@ -5,15 +5,75 @@ from numba import njit, prange
 from matplotlib import animation
 from matplotlib.animation import FuncAnimation
 from IPython import display
+from numba.typed import List
+
 
 @njit(parallel=True)
+def HK_2D_step_fast(pos_arr, R):
+    '''
+    Returns new potion of particles based on neighbors in circle of radius R
+    '''
+
+    cell_size = 1.01 * R # 
+    n_cells = int(1 + np.ceil(1.0 / cell_size))
+    grid_side = n_cells + 2
+    N = len(pos_arr)
+    grid = np.empty((grid_side, grid_side, N+1), dtype=np.int32) # padding around the grid
+
+    for x in prange(grid_side):
+        for y in range(grid_side):
+            grid[x, y, 0] = 0
+
+    point2grid = np.empty((N, 2), dtype=np.int32)
+    for i in range(N):
+        x = 1 + int(pos_arr[i, 0] / cell_size)
+        y = 1 + int(pos_arr[i, 1] / cell_size)
+        grid[x, y, 0] += 1
+        grid[x, y, grid[x, y, 0]] = i
+        point2grid[i, 0] = x
+        point2grid[i, 1] = y
+
+    pos_new = np.empty((N, 2))
+    for i in prange(N):
+        res_pos = np.array([0.0, 0.0])
+        count = 0
+        x = point2grid[i, 0]
+        y = point2grid[i, 1]
+        for ix in [-1, 0, 1]:
+            for iy in [-1, 0, 1]:
+                for k in range(1, grid[x+ix, y+iy, 0] + 1):
+                    j = grid[x+ix, y+iy, k]
+                    if (np.linalg.norm(pos_arr[i] - pos_arr[j]) <= R):
+                        res_pos += pos_arr[j]
+                        count += 1
+                        
+        pos_new[i] = res_pos / count
+
+    return pos_new
+
+# @njit()
+def HK_2D_sim_fast(pos_init, R, eps, max_iter):
+    '''
+    Simulates HK model for 2D particles
+    '''
+    pos = pos_init.copy()
+    pos_t_array = np.empty((0, pos.shape[0], pos.shape[1]), dtype=np.float64)
+    pos_t_array = np.append(pos_t_array, np.array([pos.copy()]), axis=0)
+    for i in range(max_iter):
+        pos_new = HK_2D_step_fast(pos, R)
+        if np.linalg.norm(pos_new - pos) < eps:
+            break
+        pos = pos_new
+        pos_t_array = np.append(pos_t_array, np.array([pos.copy()]), axis=0)
+    return pos_t_array, i != max_iter - 1
+@njit()
 def HK_2D_step(pos_arr, R):
     '''
     Returns new potion of particles based on neighbors in circle of radius R
     '''
     N = len(pos_arr)
     pos_new = np.empty((N, 2))
-    for i in prange(N):
+    for i in range(N):
         res_pos = np.array([0.0, 0.0])
         count = 0
         for j in range(N):
@@ -62,7 +122,7 @@ def caln_n_clusters(positions, R):
 
     return cluster_of_agent, cluster_sizes
 
-def draw_HK_2D_simulation(res_arr, cmap=None):
+def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
     plt.figure()
     N = res_arr.shape[1]
     steps = res_arr.shape[0]
@@ -88,6 +148,7 @@ def draw_HK_2D_simulation(res_arr, cmap=None):
     plt.ylabel('y opinion')
     plt.xlabel('x opinion')
     plt.legend(loc="upper right")
+    plt.title(f"N:{N} eps:{R} {text}")
     # plt.grid(True)
     plt.show()
 
