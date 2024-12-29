@@ -127,14 +127,14 @@ def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
     N = res_arr.shape[1]
     steps = res_arr.shape[0]
     plt.gca().set_aspect('equal')
-    if cmap:
+    if cmap!=None:
         cmap = mp.cm.get_cmap(cmap)
         norm=plt.Normalize(vmin=0, vmax=N)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 
     
     for i in range(N):
-        if cmap:   
+        if cmap!=None:   
             color=np.array(cmap(norm(i)))*0.9
         else:
             color = np.random.random(3)*0.7
@@ -145,8 +145,8 @@ def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
                       head_width=0.01, head_length=0.01, fc=color, ec=color, alpha=0.5)
 
     plt.scatter(res_arr[-1, :, 0], res_arr[-1, :, 1], label = 'final clusters')
-    plt.ylabel('y opinion')
-    plt.xlabel('x opinion')
+    # plt.ylabel('y opinion')
+    # plt.xlabel('x opinion')
     plt.legend(loc="upper right")
     plt.title(f"N:{N} eps:{R} {text}")
     # plt.grid(True)
@@ -154,6 +154,7 @@ def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
 
 def HK_2D_display_steps(res_arr):
     for res in res_arr:
+        plt.gca().set_aspect('equal')
         plt.scatter(res[:, 0], res[:, 1])
         plt.ylim(-0.1, 1)
         plt.xlim(-0.1, 1)
