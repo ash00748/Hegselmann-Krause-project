@@ -67,7 +67,7 @@ def HK_2D_sim_fast(pos_init, R, eps, max_iter):
         pos_t_array = np.append(pos_t_array, np.array([pos.copy()]), axis=0)
     return pos_t_array, i != max_iter - 1
 @njit()
-def HK_2D_step(pos_arr, R):
+def HK_2D_step(pos_arr, confidence):
     '''
     Returns new potion of particles based on neighbors in circle of radius R
     '''
@@ -77,15 +77,51 @@ def HK_2D_step(pos_arr, R):
         res_pos = np.array([0.0, 0.0])
         count = 0
         for j in range(N):
-            if (np.linalg.norm(pos_arr[i] - pos_arr[j]) <= R):
+            if confidence(pos_arr[i], pos_arr[j]):
                 res_pos += pos_arr[j]
                 count += 1
 
         pos_new[i] = res_pos / count
     return pos_new
 
+def create_round_conf_func(R : float):
+    R2 = R**2
+    @njit()
+    def round(op1, op2):
+        dif = op1 - op2
+        return dif[0]**2 + dif[1]**2 <= R2
+    
+    return round
+
+def create_ellipse_conf_func(a : float, b: float):
+    a2 = a**2
+    b2 = b**2
+    ab2 = a2 * b2
+    @njit()
+    def ellipse(op1, op2):
+        dif = op1 - op2
+        return (dif[0]**2)*b2 + (dif[1]**2)*a2 <= ab2
+    
+    return ellipse
+
+def create_square_conf_func(a : float):
+    @njit()
+    def square(op1, op2):
+        dif =  op1 - op2
+        return abs(dif[0]) <= a and abs(dif[1]) <= a
+    
+    return square
+
+def create_rectangle_conf_func(a : float, b : float):
+    @njit()
+    def rectangle(op1, op2):
+        dif =  op1 - op2
+        return abs(dif[0]) <= a and abs(dif[1]) <= b
+    
+    return rectangle
+
 # @njit()
-def HK_2D_sim(pos_init, R, eps, max_iter):
+def HK_2D_sim(pos_init, confidence, eps, max_iter):
     '''
     Simulates HK model for 2D particles
     '''
@@ -93,7 +129,7 @@ def HK_2D_sim(pos_init, R, eps, max_iter):
     pos_t_array = np.empty((0, pos.shape[0], pos.shape[1]), dtype=np.float64)
     pos_t_array = np.append(pos_t_array, np.array([pos.copy()]), axis=0)
     for i in range(max_iter):
-        pos_new = HK_2D_step(pos, R)
+        pos_new = HK_2D_step(pos, confidence)
         if np.linalg.norm(pos_new - pos) < eps:
             break
         pos = pos_new
@@ -101,7 +137,7 @@ def HK_2D_sim(pos_init, R, eps, max_iter):
     return pos_t_array, i != max_iter - 1
 
 @njit()
-def caln_n_clusters(positions, R):
+def caln_n_clusters(positions, confidence):
     N = positions.shape[0]
     cluster_of_agent = np.zeros(N, dtype=np.int64)
     cur_claster = 1
@@ -109,8 +145,7 @@ def caln_n_clusters(positions, R):
         if cluster_of_agent[i] == 0:
             cluster_of_agent[i] = cur_claster
             for j in range(i+1, N):
-                dist = np.linalg.norm(positions[i] - positions[j])
-                if dist <= R:
+                if confidence(positions[i], positions[j]):
                     cluster_of_agent[j] = cur_claster
             cur_claster += 1
 
@@ -121,6 +156,24 @@ def caln_n_clusters(positions, R):
         cluster_sizes[cluster_of_agent[i]] += 1
 
     return cluster_of_agent, cluster_sizes
+
+@njit()
+def get_cluster_positions(positions, cluster_of_agent, cluster_sizes):
+    n = cluster_sizes.shape[0]
+    found = np.zeros(n, dtype=np.uint8)
+    pos = np.zeros((n, 2), dtype=np.float64)
+
+    for i in range(cluster_of_agent.shape[0]):
+        cl = cluster_of_agent[i]
+        if found[cl] == 1:
+            continue
+
+        pos[cl, :] = positions[i, :]
+        found[cl] = 1
+
+    return pos
+    
+
 
 def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
     plt.figure()
