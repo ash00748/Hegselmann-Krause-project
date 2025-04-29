@@ -205,12 +205,14 @@ def draw_HK_2D_simulation(res_arr, N=None, R=None, text=None, cmap=None):
     # plt.grid(True)
     plt.show()
 
-def HK_2D_display_steps(res_arr):
+def HK_2D_display_steps(res_arr, text=None):
     for res in res_arr:
         plt.gca().set_aspect('equal')
         plt.scatter(res[:, 0], res[:, 1])
         plt.ylim(-0.1, 1)
         plt.xlim(-0.1, 1)
+        if text:
+            plt.title(text)
         plt.show()
     
 def animate_HK_2D_simulation(res_arr, file_name='scatter.gif'):
